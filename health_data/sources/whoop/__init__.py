@@ -1,0 +1,1 @@
+"""WHOOP source adapter implementation."""

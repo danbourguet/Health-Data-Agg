@@ -1,8 +1,13 @@
-# WHOOP Data Aggregator
+# Health Data Aggregator (WHOOP + Future Sources)
 
-Ingest your WHOOP data (profile, body measurements, cycles, sleeps, recoveries, workouts) into a local Postgres database running in Docker.
+This project began as a WHOOP-only ingestor and is evolving into a modular personal health data aggregator (planned: WHOOP, Epic/MyChart via FHIR, Quest labs). Current production-ready portion remains the WHOOP pipeline; a new package scaffold (`health_data/`) and unified CLI are being introduced incrementally.
 
-## Features
+Ingest your WHOOP data (profile, body measurements, cycles, sleeps, recoveries, workouts) into a local Postgres database running in Docker. Canonical cross-source tables and additional adapters will arrive in subsequent milestones.
+
+> What does "canonical" mean here?  
+> A canonical table is a normalized, source-agnostic representation (e.g. `sleep_sessions`) populated from multiple raw source formats (WHOOP now, FHIR later). Raw WHOOP tables stay untouched as the authoritative ingestion store; transformation jobs *append* into canonical tables so analytics can query one unified schema.
+
+## Features (Current WHOOP Capabilities)
 - OAuth2 Authorization Code Flow (opens local browser, stores tokens in `.token_store.json`)
 - Automatic token refresh
 - Pagination handling for collection endpoints
@@ -100,16 +105,52 @@ Via one-shot script:
 ./run_all.ps1; python whoop_ingest.py --reset
 ```
 
-## Data Model Overview
-Tables:
-- `user_basic_profile` (1 row per WHOOP user)
-- `user_body_measurement` (single-row current measurements)
-- `cycles`, `sleeps`, `recoveries`, `workouts` (activity data, raw JSON preserved)
+## New Unified CLI (Transitional)
+You can now use the experimental unified CLI (currently WHOOP only):
+```powershell
+python -m health_data.cli.main migrate      # apply new canonical & metadata migrations
+python -m health_data.cli.main whoop auth   # perform WHOOP OAuth
+python -m health_data.cli.main whoop ingest --resources cycles sleeps --since 2025-09-01T00:00:00Z --until 2025-09-07T00:00:00Z
+```
+The legacy script (`whoop_ingest.py`) still works and is the stable path; both will coexist until the new architecture fully replaces direct scripts.
 
-## Extending
-Add a new endpoint:
+## Data Model Overview
+
+### Raw WHOOP Layer
+Tables now prefixed with `whoop_raw_` to make source + layer explicit:
+- `whoop_raw_user_basic_profile`
+- `whoop_raw_user_body_measurement`
+- `whoop_raw_cycles`
+- `whoop_raw_sleeps`
+- `whoop_raw_recoveries`
+- `whoop_raw_workouts`
+
+Compatibility views (`cycles`, `sleeps`, etc.) are created by migration `20251013_02_whoop_raw_rename.sql` so legacy code and ad‑hoc queries still function. New development should target the prefixed tables.
+
+### Canonical Layer (Source-Agnostic)
+- `sleep_sessions`
+- `workouts_canonical`
+- `biometrics_vitals`
+- (Future) `lab_results`, `encounters`, `medications`, `conditions`
+
+Each canonical table stores `source_system` + `raw_source_id` to trace lineage back to the raw record.
+
+## Roadmap Snapshot
+Planned major milestones:
+1. Refactor (DONE initial scaffold) – package layout & migration system.
+2. Canonical tables population for WHOOP (sleep/workouts/vitals) – IN PROGRESS.
+3. Epic/MyChart (SMART on FHIR) adapter – Patient, Observation (vitals, labs), Encounter, Condition, Medication.
+4. Lab results canonical mapping & optional Quest ingestion strategies (PDF/FHIR export parsing).
+5. Scheduling & watermarks – automated daily incrementals.
+6. Security hardening – encrypted token store, role-based DB access.
+7. Documentation & testing expansion.
+
+## Extending (Legacy WHOOP-Specific Path)
+Add a new WHOOP endpoint (legacy method):
 1. Create fetch function in `whoop_ingest.py` using `api_request` or `fetch_paginated`.
 2. Add to `RESOURCE_MAP` and implement an upsert in `db.py` + schema update.
+
+Future (modular) extension will involve adding a new adapter under `health_data/sources/<source_name>/` implementing the `SourceAdapter` interface.
 
 ## Token Store Security
 The `.token_store.json` file contains sensitive tokens; keep it out of version control (add to `.gitignore`).

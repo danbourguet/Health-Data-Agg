@@ -37,7 +37,7 @@ def upsert_user_basic_profile(data: dict):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                '''INSERT INTO user_basic_profile (user_id,email,first_name,last_name,raw,updated_at)
+                '''INSERT INTO whoop_raw.user_basic_profile (user_id,email,first_name,last_name,raw,updated_at)
                    VALUES (%s,%s,%s,%s,%s,NOW())
                    ON CONFLICT (user_id) DO UPDATE SET email=EXCLUDED.email, first_name=EXCLUDED.first_name, last_name=EXCLUDED.last_name, raw=EXCLUDED.raw, updated_at=NOW()''',
                 (data['user_id'], data['email'], data.get('first_name'), data.get('last_name'), Json(data))
@@ -48,7 +48,7 @@ def upsert_user_body_measurement(data: dict):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                '''INSERT INTO user_body_measurement (id,height_meter,weight_kilogram,max_heart_rate,raw,updated_at)
+                '''INSERT INTO whoop_raw.user_body_measurement (id,height_meter,weight_kilogram,max_heart_rate,raw,updated_at)
                    VALUES (TRUE,%s,%s,%s,%s,NOW())
                    ON CONFLICT (id) DO UPDATE SET height_meter=EXCLUDED.height_meter, weight_kilogram=EXCLUDED.weight_kilogram, max_heart_rate=EXCLUDED.max_heart_rate, raw=EXCLUDED.raw, updated_at=NOW()''',
                 (data.get('height_meter'), data.get('weight_kilogram'), data.get('max_heart_rate'), Json(data))
@@ -60,7 +60,7 @@ def upsert_cycle(data: dict):
         with conn.cursor() as cur:
             score = data.get('score') or {}
             cur.execute(
-                '''INSERT INTO cycles (id,user_id,start,"end",score_state,score,cycle_strain,cycle_kilojoule,cycle_average_heart_rate,cycle_max_heart_rate,raw,created_at,updated_at)
+                '''INSERT INTO whoop_raw.cycles (id,user_id,start,"end",score_state,score,cycle_strain,cycle_kilojoule,cycle_average_heart_rate,cycle_max_heart_rate,raw,created_at,updated_at)
                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),NOW())
                    ON CONFLICT (id) DO UPDATE SET user_id=EXCLUDED.user_id, start=EXCLUDED.start, "end"=EXCLUDED.end, score_state=EXCLUDED.score_state, score=EXCLUDED.score, cycle_strain=EXCLUDED.cycle_strain, cycle_kilojoule=EXCLUDED.cycle_kilojoule, cycle_average_heart_rate=EXCLUDED.cycle_average_heart_rate, cycle_max_heart_rate=EXCLUDED.cycle_max_heart_rate, raw=EXCLUDED.raw, updated_at=NOW()''',
                 (data['id'], data['user_id'], data.get('start'), data.get('end'), data.get('score_state'), Json(score) if score else None,
@@ -75,7 +75,7 @@ def upsert_sleep(data: dict):
             stage = score.get('stage_summary') or {}
             needed = score.get('sleep_needed') or {}
             cur.execute(
-                '''INSERT INTO sleeps (id,cycle_id,user_id,start,"end",nap,score_state,score,
+                '''INSERT INTO whoop_raw.sleeps (id,cycle_id,user_id,start,"end",nap,score_state,score,
                    sleep_respiratory_rate,sleep_efficiency_percentage,sleep_consistency_percentage,sleep_performance_percentage,
                    sleep_needed_baseline_milli,sleep_needed_need_from_sleep_debt_milli,sleep_needed_need_from_recent_strain_milli,sleep_needed_need_from_recent_nap_milli,
                    sleep_stage_disturbance_count,sleep_stage_sleep_cycle_count,sleep_stage_total_awake_time_milli,sleep_stage_total_in_bed_time_milli,sleep_stage_total_no_data_time_milli,sleep_stage_total_rem_sleep_time_milli,sleep_stage_total_light_sleep_time_milli,sleep_stage_total_slow_wave_sleep_time_milli,
@@ -105,7 +105,7 @@ def upsert_recovery(data: dict):
         with conn.cursor() as cur:
             score = data.get('score') or {}
             cur.execute(
-                '''INSERT INTO recoveries (cycle_id,sleep_id,user_id,score_state,score,
+                '''INSERT INTO whoop_raw.recoveries (cycle_id,sleep_id,user_id,score_state,score,
                    recovery_score_value,recovery_resting_heart_rate,recovery_hrv_rmssd_milli,recovery_spo2_percentage,recovery_skin_temp_celsius,recovery_user_calibrating,
                    raw,created_at,updated_at)
                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),NOW())
@@ -124,7 +124,7 @@ def upsert_workout(data: dict):
             score = data.get('score') or {}
             zones = score.get('zone_durations') or {}
             cur.execute(
-                '''INSERT INTO workouts (id,v1_id,user_id,sport_name,start,"end",score_state,score,
+                '''INSERT INTO whoop_raw.workouts (id,v1_id,user_id,sport_name,start,"end",score_state,score,
                    workout_strain,workout_kilojoule,workout_average_heart_rate,workout_max_heart_rate,workout_percent_recorded,workout_distance_meter,workout_altitude_gain_meter,workout_altitude_change_meter,
                    zone_zero_milli,zone_one_milli,zone_two_milli,zone_three_milli,zone_four_milli,zone_five_milli,
                    raw,created_at,updated_at)
@@ -146,15 +146,15 @@ def upsert_workout(data: dict):
 # Reset helpers
 
 ACTIVITY_TABLES = [
-    'workouts',
-    'recoveries',
-    'sleeps',
-    'cycles'
+    'whoop_raw.workouts',
+    'whoop_raw.recoveries',
+    'whoop_raw.sleeps',
+    'whoop_raw.cycles'
 ]
 
 USER_TABLES = [
-    'user_body_measurement',
-    'user_basic_profile'
+    'whoop_raw.user_body_measurement',
+    'whoop_raw.user_basic_profile'
 ]
 
 def truncate_activity_tables():
@@ -193,14 +193,14 @@ def truncate_all_tables():
 def delete_activity_range(start_iso: str, end_iso: str):
     """Delete activity records whose start timestamp falls within [start_iso, end_iso)."""
     queries = {
-        'cycles': 'DELETE FROM cycles WHERE start >= %s AND start < %s',
-        'sleeps': 'DELETE FROM sleeps WHERE start >= %s AND start < %s',
-        'recoveries': 'DELETE FROM recoveries WHERE cycle_id IN (SELECT id FROM cycles WHERE start >= %s AND start < %s)',
-        'workouts': 'DELETE FROM workouts WHERE start >= %s AND start < %s'
+        'whoop_raw.cycles': 'DELETE FROM whoop_raw.cycles WHERE start >= %s AND start < %s',
+        'whoop_raw.sleeps': 'DELETE FROM whoop_raw.sleeps WHERE start >= %s AND start < %s',
+        'whoop_raw.recoveries': 'DELETE FROM whoop_raw.recoveries WHERE cycle_id IN (SELECT id FROM whoop_raw.cycles WHERE start >= %s AND start < %s)',
+        'whoop_raw.workouts': 'DELETE FROM whoop_raw.workouts WHERE start >= %s AND start < %s'
     }
     with get_conn() as conn:
         with conn.cursor() as cur:
             # order: recoveries depends on cycles (via cycle_id), so delete recoveries first
-            for table, sql in [('recoveries', queries['recoveries']), ('sleeps', queries['sleeps']), ('workouts', queries['workouts']), ('cycles', queries['cycles'])]:
+            for table, sql in [('whoop_raw.recoveries', queries['whoop_raw.recoveries']), ('whoop_raw.sleeps', queries['whoop_raw.sleeps']), ('whoop_raw.workouts', queries['whoop_raw.workouts']), ('whoop_raw.cycles', queries['whoop_raw.cycles'])]:
                 cur.execute(sql, (start_iso, end_iso))
         conn.commit()

@@ -251,7 +251,7 @@ RESOURCE_MAP = {
     'workouts': fetch_workouts,
 }
 
-# Storage dispatch
+# Storage dispatch (targets whoop_raw_* tables via db.py upserts after rename migration)
 
 def store_record(resource: str, record: Dict[str, Any]):
     if resource == 'profile':
