@@ -4,6 +4,7 @@ import click
 from typing import Optional
 from health_data.sources.whoop.adapter import WhoopAdapter
 from health_data.db.migration_runner import run_migrations
+from db import delete_activity_range  # reuse existing helper for now
 
 @click.group()
 def cli():
@@ -34,8 +35,6 @@ def whoop_auth():
 @click.option('--daily-refresh', is_flag=True, help='Refresh previous UTC day window.')
 def whoop_ingest(resource_args, resources, since: Optional[str], until: Optional[str], canonical: bool, daily_refresh: bool):
     from datetime import datetime, timezone, timedelta
-    import whoop_ingest as legacy
-
     adapter = WhoopAdapter()
     adapter.authenticate()
     available = adapter.list_resources()
@@ -55,8 +54,9 @@ def whoop_ingest(resource_args, resources, since: Optional[str], until: Optional
         today_start = datetime(year=now_utc.year, month=now_utc.month, day=now_utc.day, tzinfo=timezone.utc)
         prev_start = today_start - timedelta(days=1)
         prev_end = today_start
-        legacy.delete_activity_range(prev_start.isoformat(), prev_end.isoformat())
-        since, until = prev_start.isoformat(), prev_end.isoformat()
+        delete_activity_range(prev_start.isoformat(), prev_end.isoformat())
+        since = prev_start.isoformat()
+        until = prev_end.isoformat()
         click.echo(f'Refreshing WHOOP data for previous UTC day: {since} to {until}')
 
     for result in adapter.ingest(res_list, since=since, until=until, canonical=canonical):

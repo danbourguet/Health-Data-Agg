@@ -1,8 +1,11 @@
-# Health Data Aggregator (WHOOP + Future Sources)
+# Health Data Aggregator (Modular, Multi-Source Ready)
 
-This project began as a WHOOP-only ingestor and is evolving into a modular personal health data aggregator (planned: WHOOP, Epic/MyChart via FHIR, Quest labs). Current production-ready portion remains the WHOOP pipeline; a new package scaffold (`health_data/`) and unified CLI are being introduced incrementally.
+Modular personal health data platform starting with WHOOP. Designed from day one with a clear separation between:
+1. Raw source-specific ingestion tables (`whoop_raw` schema)
+2. Canonical, source-agnostic analytical tables (`canonical` schema)
+3. Meta / operational tables (`meta` schema)
 
-Ingest your WHOOP data (profile, body measurements, cycles, sleeps, recoveries, workouts) into a local Postgres database running in Docker. Canonical cross-source tables and additional adapters will arrive in subsequent milestones.
+Planned future integrations: Epic/MyChart (FHIR), Quest / other lab sources.
 
 > What does "canonical" mean here?  
 > A canonical table is a normalized, source-agnostic representation (e.g. `sleep_sessions`) populated from multiple raw source formats (WHOOP now, FHIR later). Raw WHOOP tables stay untouched as the authoritative ingestion store; transformation jobs *append* into canonical tables so analytics can query one unified schema.
@@ -52,57 +55,32 @@ Force re-auth and restrict to a date range:
 ./run_all.ps1 -ForceAuth -Start 2025-09-01T00:00:00Z -End 2025-10-01T00:00:00Z
 ```
 
-## Authenticate
-Open browser and complete WHOOP OAuth once (tokens cached afterwards):
-```powershell
-python whoop_ingest.py --auth-only
-```
+## Unified CLI (Primary Interface)
+All functionality is exposed through the modular CLI (legacy scripts removed).
 
-Show command help (supports Windows style `-?`):
+Authenticate (performs OAuth if needed):
 ```powershell
-python whoop_ingest.py -?
+python -m health_data.cli.main whoop auth
 ```
-
-## Ingest Data
-Fetch everything:
+Run migrations (canonical + meta tables):
 ```powershell
-python whoop_ingest.py
+python -m health_data.cli.main migrate
 ```
-Or simply:
+Ingest all WHOOP resources (raw only):
 ```powershell
-./run_all.ps1
+python -m health_data.cli.main whoop ingest
 ```
-Specify resource subset:
+Ingest a subset for a time window:
 ```powershell
-python whoop_ingest.py --resources profile body
+python -m health_data.cli.main whoop ingest cycles sleeps --since 2025-09-01T00:00:00Z --until 2025-09-02T00:00:00Z
 ```
-Filter by time window (ISO 8601). Start/end apply to collection endpoints only:
+Ingest + populate canonical tables simultaneously:
 ```powershell
-python whoop_ingest.py --start 2024-12-01T00:00:00Z --end 2025-01-01T00:00:00Z --resources cycles sleeps workouts recoveries
+python -m health_data.cli.main whoop ingest --canonical
 ```
-
-Daily refresh (replace previous full UTC day only):
+Daily refresh (drops previous UTC day in raw activity tables then reloads + transforms):
 ```powershell
-python whoop_ingest.py --daily-refresh
-```
-This deletes any existing activity rows whose start is within yesterday's UTC 00:00:00 to today 00:00:00 and reloads just that range.
-
-### Reset / Truncate Tables
-Clear only activity data (cycles, sleeps, recoveries, workouts) before reloading:
-```powershell
-python whoop_ingest.py --reset
-```
-Or wipe everything including profile & body measurement:
-```powershell
-python whoop_ingest.py --reset-all
-```
-Combine with date filters:
-```powershell
-python whoop_ingest.py --reset --start 2025-09-01T00:00:00Z --resources cycles sleeps
-```
-Via one-shot script:
-```powershell
-./run_all.ps1; python whoop_ingest.py --reset
+python -m health_data.cli.main whoop ingest --daily-refresh --canonical
 ```
 
 ## New Unified CLI (Transitional)
@@ -116,24 +94,26 @@ The legacy script (`whoop_ingest.py`) still works and is the stable path; both w
 
 ## Data Model Overview
 
-### Raw WHOOP Layer
-Tables now prefixed with `whoop_raw_` to make source + layer explicit:
-- `whoop_raw_user_basic_profile`
-- `whoop_raw_user_body_measurement`
-- `whoop_raw_cycles`
-- `whoop_raw_sleeps`
-- `whoop_raw_recoveries`
-- `whoop_raw_workouts`
+### Schemas
+- `meta`: operational metadata (tokens, future run logs)
+- `whoop_raw`: raw WHOOP ingestion tables (structure mirrors API concepts)
+- `canonical`: normalized analytical tables (multi-source ready)
 
-Compatibility views (`cycles`, `sleeps`, etc.) are created by migration `20251013_02_whoop_raw_rename.sql` so legacy code and ad‑hoc queries still function. New development should target the prefixed tables.
+### whoop_raw Tables
+- `whoop_raw.user_basic_profile`
+- `whoop_raw.user_body_measurement`
+- `whoop_raw.cycles`
+- `whoop_raw.sleeps`
+- `whoop_raw.recoveries`
+- `whoop_raw.workouts`
 
-### Canonical Layer (Source-Agnostic)
-- `sleep_sessions`
-- `workouts_canonical`
-- `biometrics_vitals`
-- (Future) `lab_results`, `encounters`, `medications`, `conditions`
+### canonical Tables (current)
+- `canonical.user_identity`
+- `canonical.sleep_sessions`
+- `canonical.workouts`
+- `canonical.biometrics_vitals`
 
-Each canonical table stores `source_system` + `raw_source_id` to trace lineage back to the raw record.
+Each canonical row includes `source_system` and `raw_source_id` for lineage.
 
 ## Roadmap Snapshot
 Planned major milestones:
@@ -145,12 +125,14 @@ Planned major milestones:
 6. Security hardening – encrypted token store, role-based DB access.
 7. Documentation & testing expansion.
 
-## Extending (Legacy WHOOP-Specific Path)
-Add a new WHOOP endpoint (legacy method):
-1. Create fetch function in `whoop_ingest.py` using `api_request` or `fetch_paginated`.
-2. Add to `RESOURCE_MAP` and implement an upsert in `db.py` + schema update.
+## Extending
+Add a new WHOOP resource (example outline):
+1. Implement fetch function in `health_data/sources/whoop/resources.py`.
+2. Add it to `RESOURCE_MAP`.
+3. Add a raw upsert (if new table needed) + schema change.
+4. Optionally add a canonical transform in `health_data/db/canonical.py` and reference it in `TRANSFORM_DISPATCH`.
 
-Future (modular) extension will involve adding a new adapter under `health_data/sources/<source_name>/` implementing the `SourceAdapter` interface.
+Future sources (FHIR, labs) will implement their own adapter under `health_data/sources/<source_name>/` and reuse canonical insert helpers.
 
 ## Token Store Security
 The `.token_store.json` file contains sensitive tokens; keep it out of version control (add to `.gitignore`).

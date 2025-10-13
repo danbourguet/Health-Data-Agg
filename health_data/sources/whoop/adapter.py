@@ -8,27 +8,29 @@ from typing import Iterable, Optional, Sequence
 from . import __doc__  # noqa: F401
 from health_data.sources.base.adapter import SourceAdapter
 from health_data.db.canonical import transform_record
-import whoop_ingest  # reuse existing module
+from .auth import get_access_token, TOKEN_MANAGER
+from .resources import RESOURCE_MAP
+from .storage import store_record
 
 class WhoopAdapter(SourceAdapter):
     source_system = 'whoop'
 
-    def authenticate(self) -> None:  # leverage existing TOKEN_MANAGER
-        whoop_ingest.TOKEN_MANAGER.get_access_token()
+    def authenticate(self) -> None:
+        get_access_token()
 
     def list_resources(self) -> Sequence[str]:
-        return list(whoop_ingest.RESOURCE_MAP.keys())
+        return list(RESOURCE_MAP.keys())
 
     def fetch(self, resource: str, since: Optional[str] = None, until: Optional[str] = None) -> Iterable[dict]:
-        fetcher = whoop_ingest.RESOURCE_MAP[resource]
+        fetcher = RESOURCE_MAP[resource]
         if resource in {'profile', 'body'}:
             yield fetcher()
         else:
             yield from fetcher(start=since, end=until)
 
     def load_raw(self, resource: str, record: dict) -> None:
-        # Reuse existing store_record function logic (calls db upserts)
-        whoop_ingest.store_record(resource, record)
+        # Persist to raw whoop tables
+        store_record(resource, record)
 
     def transform_and_load_canonical(self, resource: str, record: dict) -> None:  # override
         # Delegate to canonical transform dispatcher
