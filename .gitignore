@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+.env
+*.sqlite3
+*.db
+*.log
+*.bak
+*.swp
+*.tmp
+*.~
+
+# VS Code
+.vscode/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Environment and dependency files
+.env*
+venv/
+ENV/
+
+# Docker
+*.pid
+docker-compose.override.yml
+
+# Misc
+*.DS_Store
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Jupyter
+.ipynb_checkpoints/
+
+# PowerShell
+*.ps1~
+
+# Ignore database dumps
+*.sql
+*.dump
+ 
+# Token store
+.token_store.json

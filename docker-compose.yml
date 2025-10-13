@@ -1,0 +1,20 @@
+version: '3.9'
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: whoop-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-whoop}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-whoop_password}
+      POSTGRES_DB: ${DB_NAME:-whoop}
+    ports:
+      - "5432:5432"
+    volumes:
+      - whoop_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USER:-whoop}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  whoop_pg_data:
