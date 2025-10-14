@@ -15,16 +15,16 @@ from typing import Iterable, Sequence, Optional
 from pathlib import Path
 import json, re
 from health_data.sources.base.adapter import SourceAdapter
-from db import upsert_quest_patient, upsert_quest_observation
 
 try:
     import pdfplumber  # type: ignore
 except Exception:  # pragma: no cover
     pdfplumber = None
 
+
 class QuestAdapter(SourceAdapter):
     source_system = 'quest'
-    _resources = ['patient', 'observations']
+    _resources = ['observations']
 
     def __init__(self, path_: str, patient_id: Optional[str]):
         self.path = Path(path_)
@@ -32,7 +32,7 @@ class QuestAdapter(SourceAdapter):
             raise FileNotFoundError(f'Path not found: {self.path}')
         self.patient_id_override = patient_id
 
-    def authenticate(self) -> None:  # no auth required
+    def authenticate(self) -> None:
         return
 
     def list_resources(self) -> Sequence[str]:
@@ -44,30 +44,10 @@ class QuestAdapter(SourceAdapter):
         if self.path.is_file():
             yield self.path
         else:
-            for ext in ('*.json', '*.ndjson', '*.pdf'):
+            for ext in ('*.pdf',):
                 yield from self.path.glob(ext)
 
-    def _iter_json_objects(self, p: Path):
-        txt = p.read_text(encoding='utf-8')
-        try:
-            data = json.loads(txt)
-            if isinstance(data, list):
-                for obj in data:
-                    if isinstance(obj, dict):
-                        yield obj
-            elif isinstance(data, dict):
-                yield data
-        except json.JSONDecodeError:
-            for line in txt.splitlines():
-                line=line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                    if isinstance(obj, dict):
-                        yield obj
-                except Exception:
-                    continue
+    # Removed JSON/NDJSON/FHIR logic
 
     def _parse_pdf(self, p: Path) -> Iterable[dict]:
         if not pdfplumber:
@@ -127,32 +107,15 @@ class QuestAdapter(SourceAdapter):
 
     def fetch(self, resource: str, since: Optional[str] = None, until: Optional[str] = None) -> Iterable[dict]:
         for file in self._iter_files():
-            if file.suffix.lower() in ('.json', '.ndjson'):
-                for obj in self._iter_json_objects(file):
-                    rtype = obj.get('resourceType')
-                    if resource == 'patient' and rtype == 'Patient':
-                        yield obj
-                    elif resource == 'observations' and rtype == 'Observation':
-                        dt = obj.get('effectiveDateTime') or obj.get('issued')
-                        if since and dt and dt < since:
-                            continue
-                        if until and dt and dt >= until:
-                            continue
-                        yield obj
-            elif file.suffix.lower() == '.pdf' and resource == 'observations':
+            if file.suffix.lower() == '.pdf' and resource == 'observations':
                 yield from self._parse_pdf(file)
 
     def load_raw(self, resource: str, record: dict) -> None:
-        if resource == 'patient':
-            upsert_quest_patient(record)
-        elif resource == 'observations':
-            upsert_quest_observation(record)
+        # PDF parsing only; implement storage if needed
+        pass
 
     def transform_and_load_unified(self, resource: str, record: dict) -> None:
-        if resource == 'observations':
-            from health_data.db.unified import transform_quest_observation, get_conn
-            with get_conn() as conn:
-                transform_quest_observation(conn, record)
-                conn.commit()
+        # PDF parsing only; implement transformation if needed
+        pass
 
 __all__ = ['QuestAdapter']

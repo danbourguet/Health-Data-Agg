@@ -106,37 +106,14 @@ def unified_info():
     click.echo('  dbt run && dbt test')
     click.echo('See README for details.')
 
-@cli.group()
-def quest():  # pragma: no cover
-    """Quest diagnostics ingestion (FHIR file-based initial)."""
-
-@quest.command('ingest')
-@click.option('--path', 'path_', required=True, help='Path to Quest PDF/JSON/NDJSON file or directory of such files.')
+@cli.command('ingest-pdf')
+@click.option('--path', 'path_', required=True, help='Path to Quest PDF file or directory of such files.')
 @click.option('--patient-id', help='Override patient id (if not derivable)')
-@click.option('--resources', help='Comma/space list (patient,observations) default all.')
-@click.option('--since', type=str, help='Observation collected >= since (ISO).')
-@click.option('--until', type=str, help='Observation collected < until (ISO).')
-@click.option('--unified', 'unified_flag', is_flag=True, help='Also load into unified.lab_results (observations only).')
-def quest_ingest(path_, patient_id, resources, since, until, unified_flag):
-    if unified_flag:
-        # Fail fast if lab_results missing; instruct user to run bootstrap/setup.
-        import psycopg2
-        with psycopg2.connect(DSN) as _conn:
-            with _conn.cursor() as _cur:
-                _cur.execute("SELECT to_regclass('unified.lab_results')")
-                if not _cur.fetchone()[0]:
-                    raise click.ClickException("unified.lab_results not found. Run: python -m health_data.cli.main bootstrap (or setup_db.py) before ingesting with --unified.")
+def ingest_pdf(path_, patient_id):
+    """Ingest Quest PDF lab results only (no API/FHIR)."""
     adapter = QuestAdapter(path_=path_, patient_id=patient_id)
     adapter.authenticate()
-    available = adapter.list_resources()
-    if resources:
-        res_list = resources.replace(',', ' ').split()
-    else:
-        res_list = available
-    for r in res_list:
-        if r not in available:
-            raise click.UsageError(f'Unknown Quest resource: {r}')
-    for result in adapter.ingest(res_list, since=since, until=until, canonical=unified_flag):
+    for result in adapter.ingest(['observations'], since=None, until=None, canonical=False):
         click.echo(f'{result.resource}: fetched={result.records_fetched} stored={result.records_loaded} status={result.status}')
         if result.error:
             click.echo(f'  Error: {result.error}', err=True)

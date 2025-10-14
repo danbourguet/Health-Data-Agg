@@ -19,7 +19,7 @@ Minimal personal health data stack (WHOOP + Quest labs) showcasing Python ingest
 flowchart LR
   subgraph Sources
     W[WHOOP API] -->|OAuth + REST| A1[WHOOP Adapter]
-    Q[Quest PDFs / FHIR JSON] --> A2[Quest Adapter]
+  Q[Quest PDFs] --> A2[Quest Adapter]
   end
   A1 --> R1[(whoop_raw.*)]
   A2 --> R2[(quest_raw.*)]
@@ -39,7 +39,7 @@ flowchart LR
   DBT --> U
 ```
 
-Minimal personal health data stack (WHOOP + Quest labs) showcasing Python ingestion + dbt modeling.
+Minimal personal health data stack (WHOOP + Quest PDF labs) showcasing Python ingestion + dbt modeling.
 
 ---
 ## 1. Quick Start (TL;DR)
@@ -64,15 +64,15 @@ dbt run
 dbt test
 ```
 
-Optional Quest labs ingestion (directory of JSON/NDJSON FHIR or PDFs):
+
+Optional Quest labs ingestion (PDF only):
 ```powershell
-python -m health_data.cli.main quest ingest --path path\to\labs --patient-id self --unified
-dbt run --select unified_lab_results
+python -m health_data.cli.main ingest-pdf --path path\to\labs --patient-id self
 ```
 
 ---
 ## 2. Concepts
-- Raw layer: `whoop_raw.*`, `quest_raw.*` store source payloads (idempotent upserts).
+- Raw layer: `whoop_raw.*`, `quest_raw.*` store source payloads (idempotent upserts from API and PDF).
 - Modeling: dbt staging (`staging` schema) selects/renames; unified models (`unified` schema) produce analytics-friendly tables.
 - Orchestration: Prefect flow (optional) chains ingest + dbt (`python -m orchestration.flows run-full-refresh`).
 
@@ -93,10 +93,10 @@ Pull previous UTC day only:
 python -m health_data.cli.main whoop ingest --daily-refresh
 dbt run --select unified_sleep_sessions unified_workouts unified_vitals
 ```
+
 Add new Quest PDFs then rebuild labs:
 ```powershell
-python -m health_data.cli.main quest ingest --path new_labs --unified
-dbt run --select unified_lab_results
+python -m health_data.cli.main ingest-pdf --path new_labs --patient-id self
 ```
 
 Full end-to-end via Prefect (optional):
@@ -125,7 +125,7 @@ orchestration/flows.py     # Prefect flows (ingest + dbt)
 ```powershell
 python -m health_data.cli.main whoop auth
 python -m health_data.cli.main whoop ingest --since 2025-09-01T00:00:00Z --until 2025-09-05T00:00:00Z
-python -m health_data.cli.main quest ingest --path labs --unified
+python -m health_data.cli.main ingest-pdf --path labs --patient-id self
 dbt run --select unified_sleep_sessions
 dbt test
 dbt docs generate
