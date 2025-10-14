@@ -1,0 +1,16 @@
+name: health_data
+version: 1.0.0
+config-version: 2
+profile: health_data
+model-paths: ["models"]
+
+models:
+  health_data:
+    +materialized: view
+    staging:
+      +schema: staging
+      +materialized: view
+    unified:
+      +schema: unified
+      +materialized: incremental
+      +on_schema_change: append_new_columns

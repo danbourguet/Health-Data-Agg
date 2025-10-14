@@ -99,49 +99,12 @@ def whoop_ingest(resource_args, resources, since: Optional[str], until: Optional
         if result.error:
             click.echo(f'  Error: {result.error}', err=True)
 
-@cli.group()
-def unified():  # pragma: no cover - simple group
-    """Unified layer operations."""
-
-@unified.command('rebuild')
-@click.option('--truncate', is_flag=True, help='Truncate canonical tables before rebuilding (default: True).', default=True)
-def unified_rebuild(truncate: bool):
-    """Rebuild unified tables from raw WHOOP data."""
-    import psycopg2
-    from health_data.db.canonical import transform_record
-    with psycopg2.connect(DSN) as conn:
-        with conn.cursor() as cur:
-            if truncate:
-                cur.execute('TRUNCATE unified.sleep_sessions, unified.workouts, unified.biometrics_vitals RESTART IDENTITY CASCADE;')
-                # Keep user_identity (upsert semantics) - do not truncate
-        conn.commit()
-    # Stream raw rows and transform
-    resources_processed = { 'profile':0, 'sleeps':0, 'workouts':0, 'recoveries':0 }
-    with psycopg2.connect(DSN) as conn:
-        with conn.cursor() as cur:
-            # profile (single row)
-            cur.execute('SELECT raw FROM whoop_raw.user_basic_profile')
-            for (raw,) in cur.fetchall():
-                transform_record('profile', raw)
-                resources_processed['profile'] += 1
-            # sleeps
-            cur.execute('SELECT raw FROM whoop_raw.sleeps')
-            for (raw,) in cur.fetchall():
-                transform_record('sleeps', raw)
-                resources_processed['sleeps'] += 1
-            # workouts
-            cur.execute('SELECT raw FROM whoop_raw.workouts')
-            for (raw,) in cur.fetchall():
-                transform_record('workouts', raw)
-                resources_processed['workouts'] += 1
-            # recoveries
-            cur.execute('SELECT raw FROM whoop_raw.recoveries')
-            for (raw,) in cur.fetchall():
-                transform_record('recoveries', raw)
-                resources_processed['recoveries'] += 1
-    click.echo('Unified rebuild complete:')
-    for k,v in resources_processed.items():
-        click.echo(f'  {k}: {v} records processed')
+@cli.command('unified-info')
+def unified_info():
+    """Explain how to build the unified layer (dbt primary)."""
+    click.echo('Unified layer is now built via dbt models. Run:')
+    click.echo('  dbt run && dbt test')
+    click.echo('See README for details.')
 
 @cli.group()
 def quest():  # pragma: no cover

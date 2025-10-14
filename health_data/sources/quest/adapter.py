@@ -148,9 +148,9 @@ class QuestAdapter(SourceAdapter):
         elif resource == 'observations':
             upsert_quest_observation(record)
 
-    def transform_and_load_canonical(self, resource: str, record: dict) -> None:
+    def transform_and_load_unified(self, resource: str, record: dict) -> None:
         if resource == 'observations':
-            from health_data.db.canonical import transform_quest_observation, get_conn
+            from health_data.db.unified import transform_quest_observation, get_conn
             with get_conn() as conn:
                 transform_quest_observation(conn, record)
                 conn.commit()

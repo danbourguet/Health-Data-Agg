@@ -1,158 +1,148 @@
-# Health Data Aggregator (Modular, Multi-Source Ready)
-
-Modular personal health data platform starting with WHOOP. Designed from day one with a clear separation between:
-1. Raw source-specific ingestion tables (`whoop_raw` schema)
-2. Canonical, source-agnostic analytical tables (`canonical` schema)
-3. Meta / operational tables (`meta` schema)
-
-Planned future integrations: Epic/MyChart (FHIR), Quest / other lab sources.
-
-> What does "canonical" mean here?  
-> A canonical table is a normalized, source-agnostic representation (e.g. `sleep_sessions`) populated from multiple raw source formats (WHOOP now, FHIR later). Raw WHOOP tables stay untouched as the authoritative ingestion store; transformation jobs *append* into canonical tables so analytics can query one unified schema.
-
-## Features (Current WHOOP Capabilities)
-- OAuth2 Authorization Code Flow (opens local browser, stores tokens in `.token_store.json`)
-- Automatic token refresh
-- Pagination handling for collection endpoints
-- Retry and rate limit (429) backoff
-- Idempotent upserts into Postgres
-
-## Prerequisites
-- Docker & Docker Compose
-- Python 3.11+
-- A WHOOP Developer application (client id & secret) with scopes:
-  `read:profile read:body_measurement read:cycles read:sleep read:recovery read:workout`
-
-## Setup
-1. Copy environment file:
-```powershell
-Copy-Item .env.example .env
-```
-2. Edit `.env` and set:
-```
-WHOOP_CLIENT_ID=your_client_id
-WHOOP_CLIENT_SECRET=your_client_secret
-WHOOP_REDIRECT_URI=http://localhost:8765/callback
-```
-3. Start Postgres:
-```powershell
 docker compose up -d
+dbt run
+dbt test
+dbt docs generate
+dbt docs serve
+# Health Data Aggregator
+
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
+![Postgres](https://img.shields.io/badge/Postgres-15-336791?logo=postgresql)
+![dbt](https://img.shields.io/badge/dbt-Postgres-orange?logo=dbt)
+![Prefect](https://img.shields.io/badge/Prefect-2.x-1F62B2?logo=prefect)
+![License](https://img.shields.io/badge/License-MIT-lightgrey)
+
+Minimal personal health data stack (WHOOP + Quest labs) showcasing Python ingestion + dbt modeling + Prefect orchestration.
+
+---
+## Architecture Diagram
+```mermaid
+flowchart LR
+  subgraph Sources
+    W[WHOOP API] -->|OAuth + REST| A1[WHOOP Adapter]
+    Q[Quest PDFs / FHIR JSON] --> A2[Quest Adapter]
+  end
+  A1 --> R1[(whoop_raw.*)]
+  A2 --> R2[(quest_raw.*)]
+  R1 --> S1[[staging WHOOP views]]
+  R2 --> S2[[staging Quest views]]
+  S1 --> U[(unified tables)]
+  S2 --> U
+  U --> AN[Analytics / Docs]
+  subgraph Orchestration
+    PF[Prefect Flow]
+  end
+  PF --> A1
+  PF --> A2
+  PF --> DBT[dbt run + test]
+  DBT --> S1
+  DBT --> S2
+  DBT --> U
 ```
-4. Create virtual environment & install dependencies:
+
+Minimal personal health data stack (WHOOP + Quest labs) showcasing Python ingestion + dbt modeling.
+
+---
+## 1. Quick Start (TL;DR)
 ```powershell
+git clone <this repo>
+cd health-data-whoop-agg
+Copy-Item .env.example .env
+docker compose up -d   # start Postgres
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-### One-shot bootstrap & ingest
-Alternatively run the helper script (creates venv, installs deps, performs OAuth if needed, runs full ingestion):
-```powershell
-./run_all.ps1
-```
-Force re-auth and restrict to a date range:
-```powershell
-./run_all.ps1 -ForceAuth -Start 2025-09-01T00:00:00Z -End 2025-10-01T00:00:00Z
-```
-
-## Simplified CLI Flow (Recommended)
-Core lifecycle now uses four clear steps:
-
-1. Bootstrap database schemas (idempotent)
-```powershell
 python -m health_data.cli.main bootstrap
+python -m health_data.cli.main whoop auth   # browser opens; approve
+python -m health_data.cli.main whoop ingest # pulls raw data
+
+# dbt profile (one-time)
+New-Item -ItemType Directory -Force $env:USERPROFILE\.dbt | Out-Null
+Copy-Item dbt\profiles.example.yml $env:USERPROFILE\.dbt\profiles.yml
+
+dbt debug   # verify connection
+dbt run
+dbt test
 ```
-2. Authenticate WHOOP (opens browser; stores/refreshes token)
+
+Optional Quest labs ingestion (directory of JSON/NDJSON FHIR or PDFs):
 ```powershell
-python -m health_data.cli.main whoop auth
+python -m health_data.cli.main quest ingest --path path\to\labs --patient-id self --unified
+dbt run --select unified_lab_results
 ```
-3. Ingest raw WHOOP data (all resources by default)
-```powershell
-python -m health_data.cli.main whoop ingest
-```
-  Subset / window example:
-```powershell
-python -m health_data.cli.main whoop ingest sleeps workouts --since 2025-09-01T00:00:00Z --until 2025-09-05T00:00:00Z
-```
-  Daily refresh previous UTC day:
+
+---
+## 2. Concepts
+- Raw layer: `whoop_raw.*`, `quest_raw.*` store source payloads (idempotent upserts).
+- Modeling: dbt staging (`staging` schema) selects/renames; unified models (`unified` schema) produce analytics-friendly tables.
+- Orchestration: Prefect flow (optional) chains ingest + dbt (`python -m orchestration.flows run-full-refresh`).
+
+---
+## 3. Detailed Setup
+1. Environment file: edit `.env` with WHOOP credentials (create a developer app). 
+2. Start database: `docker compose up -d` (Postgres running on localhost:5432).
+3. Install Python deps inside virtualenv.
+4. Bootstrap schemas: applies `schema.sql` (safe to rerun).
+5. Authenticate & ingest WHOOP.
+6. Create dbt profile from `dbt/profiles.example.yml` (or set `DBT_PROFILES_DIR=./dbt`).
+7. Run `dbt run` + `dbt test` to build/test unified layer.
+
+---
+## 4. Running Again / Daily Use
+Pull previous UTC day only:
 ```powershell
 python -m health_data.cli.main whoop ingest --daily-refresh
+dbt run --select unified_sleep_sessions unified_workouts unified_vitals
 ```
-4. Rebuild canonical analytical tables from raw
+Add new Quest PDFs then rebuild labs:
 ```powershell
-python -m health_data.cli.main canonical rebuild
+python -m health_data.cli.main quest ingest --path new_labs --unified
+dbt run --select unified_lab_results
 ```
 
-Rebuild is safe to rerun; it upserts identity and (by default) truncates/fills the other canonical tables.
-
-### About `migrate`
-The `migrate` command remains available for future incremental migrations (none shipped yet). Until actual migration files exist, prefer `bootstrap`.
-
-## Data Model Overview
-
-### Schemas
-- `meta`: operational metadata (tokens, future run logs)
-- `whoop_raw`: raw WHOOP ingestion tables (structure mirrors API concepts)
-- `canonical`: normalized analytical tables (multi-source ready)
-
-### whoop_raw Tables
-- `whoop_raw.user_basic_profile`
-- `whoop_raw.user_body_measurement`
-- `whoop_raw.cycles`
-- `whoop_raw.sleeps`
-- `whoop_raw.recoveries`
-- `whoop_raw.workouts`
-
-### canonical Tables (current)
- - `canonical.lab_results`
-
-Each canonical row includes `source_system` and `raw_source_id` for lineage.
-### Quest (Lab Results) Ingestion (File / PDF)
-Provide either:
-1. A directory containing JSON / NDJSON FHIR resources (Patient / Observation), or
-2. One or more Quest PDF lab reports.
-
-Example:
+Full end-to-end via Prefect (optional):
 ```powershell
-python -m health_data.cli.main quest ingest --path path/to/quest_exports --canonical
+python -m orchestration.flows run-full-refresh --quest-path path\to\labs
 ```
-Specify a patient id if not derivable (PDF mode):
+
+---
+## 5. Project Structure (Essentials)
+```
+schema.sql                 # bootstrap DDL (raw + unified)
+health_data/               # Python package
+  sources/                 # adapters (whoop, quest)
+  db/unified.py            # Python transform helpers (residual, optional)
+  cli/main.py              # CLI entry
+dbt/
+  dbt_project.yml          # dbt configuration
+  models/staging/          # staging views
+  models/unified/          # incremental unified models + tests yaml
+  macros/                  # reusable Jinja macros
+orchestration/flows.py     # Prefect flows (ingest + dbt)
+```
+
+---
+## 6. Common Commands
 ```powershell
-python -m health_data.cli.main quest ingest --path path/to/reports --patient-id self --canonical
+python -m health_data.cli.main whoop auth
+python -m health_data.cli.main whoop ingest --since 2025-09-01T00:00:00Z --until 2025-09-05T00:00:00Z
+python -m health_data.cli.main quest ingest --path labs --unified
+dbt run --select unified_sleep_sessions
+dbt test
+dbt docs generate
+dbt docs serve
 ```
-Filters:
-```powershell
-python -m health_data.cli.main quest ingest --path path/to/reports --resources observations --since 2025-09-01T00:00:00Z --until 2025-10-01T00:00:00Z --canonical
-```
-PDF parsing heuristic extracts columns: test name, value (+flag), reference range.
-Mapped into pseudo-FHIR Observation then canonical.lab_results via existing transform logic.
 
-## Roadmap Snapshot
-Near-term milestones:
-1. Canonical rebuild command (DONE) & simplified flow (DONE)
-2. Add ingestion run logging + watermarks (incremental readiness)
-3. Epic/MyChart (SMART on FHIR) adapter (Patient, Observation, Encounter, Condition, Medication)
-4. Lab results mapping & Quest ingestion approach
-5. Scheduling & automation (cron / task runner)
-6. Security hardening (encrypted token store, DB roles)
-7. Tests & CI
+---
+## 7. Troubleshooting
+- Missing profiles.yml warning: copy `dbt/profiles.example.yml` to `%USERPROFILE%\.dbt\profiles.yml` or export `DBT_PROFILES_DIR`.
+- 401 WHOOP: delete `.token_store.json`, re-run auth.
+- Empty unified tables: ensure you ran ingest before `dbt run`.
+- Network/SSL errors: rerun; upserts are idempotent.
 
-## Extending
-Add a new WHOOP resource (example outline):
-1. Implement fetch function in `health_data/sources/whoop/resources.py`.
-2. Add it to `RESOURCE_MAP`.
-3. Add a raw upsert (if new table needed) + schema change.
-4. Optionally add a canonical transform in `health_data/db/canonical.py` and reference it in `TRANSFORM_DISPATCH`.
+---
+## 8. Extending (Quick Notes)
+Add a new source: create adapter under `health_data/sources/<name>/`, raw upsert in `db.py`, staging model, unified model, tests.
 
-Future sources (FHIR, labs) will implement their own adapter under `health_data/sources/<source_name>/` and reuse canonical insert helpers.
-
-## Token Store Security
-The `.token_store.json` file contains sensitive tokens; keep it out of version control (add to `.gitignore`).
-
-## Troubleshooting
-- 401 Unauthorized repeatedly: delete `.token_store.json` and re-run `--auth-only`.
-- Rate limiting: script auto-backs off; large historical ranges may take time.
-- SSL or network errors: script will abort—re-run; upserts are idempotent.
-
-## License
-Provided as-is for personal data aggregation.
+---
+## 9. License
+Personal / educational usage. See repository for details.

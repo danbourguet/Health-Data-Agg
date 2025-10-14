@@ -34,8 +34,8 @@ class SourceAdapter(ABC):
     def load_raw(self, resource: str, record: dict) -> None:
         """Persist raw record into source-specific raw or existing tables."""
 
-    def transform_and_load_canonical(self, resource: str, record: dict) -> None:  # optional override
-        """Optional: map raw record into canonical tables."""
+    def transform_and_load_unified(self, resource: str, record: dict) -> None:  # optional override
+        """Optional: map raw record into unified tables (Python path; may be deprecated when dbt is primary)."""
         return
 
     def ingest(self, resources: Sequence[str], since: Optional[str], until: Optional[str], canonical: bool = False) -> Iterable[IngestResult]:
@@ -52,7 +52,7 @@ class SourceAdapter(ABC):
                     self.load_raw(res, rec)
                     loaded += 1
                     if canonical:
-                        self.transform_and_load_canonical(res, rec)
+                        self.transform_and_load_unified(res, rec)
             except Exception as e:  # noqa: BLE001
                 status = 'error'
                 err = str(e)

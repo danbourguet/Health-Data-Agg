@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Iterable, Optional, Sequence
 from . import __doc__  # noqa: F401
 from health_data.sources.base.adapter import SourceAdapter
-from health_data.db.canonical import transform_record
+from health_data.db.unified import transform_record
 from .auth import get_access_token, TOKEN_MANAGER
 from .resources import RESOURCE_MAP
 from .storage import store_record
@@ -32,6 +32,6 @@ class WhoopAdapter(SourceAdapter):
         # Persist to raw whoop tables
         store_record(resource, record)
 
-    def transform_and_load_canonical(self, resource: str, record: dict) -> None:  # override
-        # Delegate to canonical transform dispatcher
+    def transform_and_load_unified(self, resource: str, record: dict) -> None:  # override
+        # Delegate to unified transform dispatcher
         transform_record(resource, record)

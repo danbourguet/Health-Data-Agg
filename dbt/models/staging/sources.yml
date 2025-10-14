@@ -1,0 +1,14 @@
+version: 2
+sources:
+  - name: whoop_raw
+    schema: whoop_raw
+    tables:
+      - name: sleeps
+      - name: workouts
+      - name: recoveries
+      - name: user_basic_profile
+  - name: quest_raw
+    schema: quest_raw
+    tables:
+      - name: observations
+      - name: patient
