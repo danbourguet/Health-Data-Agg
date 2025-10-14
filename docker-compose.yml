@@ -1,9 +1,9 @@
-version: '3.9'
 services:
-  postgres:
+  db:
     image: postgres:16-alpine
-    container_name: whoop-postgres
+    container_name: health-data-db
     environment:
+      # These map to the .env variables consumed by the app; defaults let compose up work instantly.
       POSTGRES_USER: ${DB_USER:-whoop}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-whoop_password}
       POSTGRES_DB: ${DB_NAME:-whoop}

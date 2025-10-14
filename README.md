@@ -55,42 +55,38 @@ Force re-auth and restrict to a date range:
 ./run_all.ps1 -ForceAuth -Start 2025-09-01T00:00:00Z -End 2025-10-01T00:00:00Z
 ```
 
-## Unified CLI (Primary Interface)
-All functionality is exposed through the modular CLI (legacy scripts removed).
+## Simplified CLI Flow (Recommended)
+Core lifecycle now uses four clear steps:
 
-Authenticate (performs OAuth if needed):
+1. Bootstrap database schemas (idempotent)
+```powershell
+python -m health_data.cli.main bootstrap
+```
+2. Authenticate WHOOP (opens browser; stores/refreshes token)
 ```powershell
 python -m health_data.cli.main whoop auth
 ```
-Run migrations (canonical + meta tables):
-```powershell
-python -m health_data.cli.main migrate
-```
-Ingest all WHOOP resources (raw only):
+3. Ingest raw WHOOP data (all resources by default)
 ```powershell
 python -m health_data.cli.main whoop ingest
 ```
-Ingest a subset for a time window:
+  Subset / window example:
 ```powershell
-python -m health_data.cli.main whoop ingest cycles sleeps --since 2025-09-01T00:00:00Z --until 2025-09-02T00:00:00Z
+python -m health_data.cli.main whoop ingest sleeps workouts --since 2025-09-01T00:00:00Z --until 2025-09-05T00:00:00Z
 ```
-Ingest + populate canonical tables simultaneously:
+  Daily refresh previous UTC day:
 ```powershell
-python -m health_data.cli.main whoop ingest --canonical
+python -m health_data.cli.main whoop ingest --daily-refresh
 ```
-Daily refresh (drops previous UTC day in raw activity tables then reloads + transforms):
+4. Rebuild canonical analytical tables from raw
 ```powershell
-python -m health_data.cli.main whoop ingest --daily-refresh --canonical
+python -m health_data.cli.main canonical rebuild
 ```
 
-## New Unified CLI (Transitional)
-You can now use the experimental unified CLI (currently WHOOP only):
-```powershell
-python -m health_data.cli.main migrate      # apply new canonical & metadata migrations
-python -m health_data.cli.main whoop auth   # perform WHOOP OAuth
-python -m health_data.cli.main whoop ingest --resources cycles sleeps --since 2025-09-01T00:00:00Z --until 2025-09-07T00:00:00Z
-```
-The legacy script (`whoop_ingest.py`) still works and is the stable path; both will coexist until the new architecture fully replaces direct scripts.
+Rebuild is safe to rerun; it upserts identity and (by default) truncates/fills the other canonical tables.
+
+### About `migrate`
+The `migrate` command remains available for future incremental migrations (none shipped yet). Until actual migration files exist, prefer `bootstrap`.
 
 ## Data Model Overview
 
@@ -108,22 +104,38 @@ The legacy script (`whoop_ingest.py`) still works and is the stable path; both w
 - `whoop_raw.workouts`
 
 ### canonical Tables (current)
-- `canonical.user_identity`
-- `canonical.sleep_sessions`
-- `canonical.workouts`
-- `canonical.biometrics_vitals`
+ - `canonical.lab_results`
 
 Each canonical row includes `source_system` and `raw_source_id` for lineage.
+### Quest (Lab Results) Ingestion (File / PDF)
+Provide either:
+1. A directory containing JSON / NDJSON FHIR resources (Patient / Observation), or
+2. One or more Quest PDF lab reports.
+
+Example:
+```powershell
+python -m health_data.cli.main quest ingest --path path/to/quest_exports --canonical
+```
+Specify a patient id if not derivable (PDF mode):
+```powershell
+python -m health_data.cli.main quest ingest --path path/to/reports --patient-id self --canonical
+```
+Filters:
+```powershell
+python -m health_data.cli.main quest ingest --path path/to/reports --resources observations --since 2025-09-01T00:00:00Z --until 2025-10-01T00:00:00Z --canonical
+```
+PDF parsing heuristic extracts columns: test name, value (+flag), reference range.
+Mapped into pseudo-FHIR Observation then canonical.lab_results via existing transform logic.
 
 ## Roadmap Snapshot
-Planned major milestones:
-1. Refactor (DONE initial scaffold) – package layout & migration system.
-2. Canonical tables population for WHOOP (sleep/workouts/vitals) – IN PROGRESS.
-3. Epic/MyChart (SMART on FHIR) adapter – Patient, Observation (vitals, labs), Encounter, Condition, Medication.
-4. Lab results canonical mapping & optional Quest ingestion strategies (PDF/FHIR export parsing).
-5. Scheduling & watermarks – automated daily incrementals.
-6. Security hardening – encrypted token store, role-based DB access.
-7. Documentation & testing expansion.
+Near-term milestones:
+1. Canonical rebuild command (DONE) & simplified flow (DONE)
+2. Add ingestion run logging + watermarks (incremental readiness)
+3. Epic/MyChart (SMART on FHIR) adapter (Patient, Observation, Encounter, Condition, Medication)
+4. Lab results mapping & Quest ingestion approach
+5. Scheduling & automation (cron / task runner)
+6. Security hardening (encrypted token store, DB roles)
+7. Tests & CI
 
 ## Extending
 Add a new WHOOP resource (example outline):

@@ -47,3 +47,6 @@ docker-compose.override.yml
  
 # Token store
 .token_store.json
+
+# Quest reports
+*.pdf

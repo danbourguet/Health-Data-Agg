@@ -143,6 +143,69 @@ def upsert_workout(data: dict):
             )
         conn.commit()
 
+# Quest (FHIR) upserts
+
+def upsert_quest_patient(data: dict):
+    patient_id = data.get('id')
+    if not patient_id:
+        return
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''INSERT INTO quest_raw.patient (id, raw, updated_at) VALUES (%s,%s,NOW())
+                   ON CONFLICT (id) DO UPDATE SET raw=EXCLUDED.raw, updated_at=NOW()''',
+                (patient_id, Json(data))
+            )
+        conn.commit()
+
+def upsert_quest_observation(data: dict):
+    obs_id = data.get('id')
+    if not obs_id:
+        return
+    # Extract common FHIR fields
+    code = None; code_system = None; code_display = None
+    coding = ((data.get('code') or {}).get('coding') or [])
+    if coding:
+        c0 = coding[0]
+        code = c0.get('code'); code_system = c0.get('system'); code_display = c0.get('display')
+    effective = data.get('effectiveDateTime') or data.get('issued')
+    value_num = None; value_text = None; unit = None
+    if 'valueQuantity' in data:
+        vq = data['valueQuantity']
+        value_num = vq.get('value'); unit = vq.get('unit')
+    elif 'valueString' in data:
+        value_text = data.get('valueString')
+    elif 'valueCodeableConcept' in data:
+        value_text = (data['valueCodeableConcept'].get('text') or '')
+    # Reference range
+    ref_low = None; ref_high = None; abnormal_flag = None
+    rr = data.get('referenceRange') or []
+    if rr:
+        r0 = rr[0]
+        low = r0.get('low') or {}
+        high = r0.get('high') or {}
+        ref_low = low.get('value'); ref_high = high.get('value')
+    # Abnormal flag from interpretation
+    interp = data.get('interpretation') or {}
+    interp_coding = interp.get('coding') if isinstance(interp, dict) else None
+    if interp_coding:
+        abnormal_flag = interp_coding[0].get('code')
+    patient_refs = data.get('subject') or {}
+    patient_id = None
+    if isinstance(patient_refs, dict):
+        ref = patient_refs.get('reference')
+        if ref and ref.startswith('Patient/'):
+            patient_id = ref.split('/',1)[1]
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''INSERT INTO quest_raw.observations (id,patient_id,code,code_system,code_display,effective_datetime,value_num,value_text,unit,reference_low,reference_high,abnormal_flag,raw,updated_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                   ON CONFLICT (id) DO UPDATE SET patient_id=EXCLUDED.patient_id, code=EXCLUDED.code, code_system=EXCLUDED.code_system, code_display=EXCLUDED.code_display, effective_datetime=EXCLUDED.effective_datetime, value_num=EXCLUDED.value_num, value_text=EXCLUDED.value_text, unit=EXCLUDED.unit, reference_low=EXCLUDED.reference_low, reference_high=EXCLUDED.reference_high, abnormal_flag=EXCLUDED.abnormal_flag, raw=EXCLUDED.raw, updated_at=NOW()''',
+                (obs_id, patient_id, code, code_system, code_display, effective, value_num, value_text, unit, ref_low, ref_high, abnormal_flag, Json(data))
+            )
+        conn.commit()
+
 # Reset helpers
 
 ACTIVITY_TABLES = [

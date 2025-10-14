@@ -3,3 +3,4 @@ psycopg2-binary>=2.9.9,<3.0.0
 python-dotenv>=1.0.0,<2.0.0
 rich>=13.7.0,<14.0.0
 click>=8.1.7,<9.0.0
+pdfplumber>=0.11.0,<0.12.0
