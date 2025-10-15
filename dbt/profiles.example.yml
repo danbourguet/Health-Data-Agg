@@ -8,12 +8,13 @@ health_data:
   outputs:
     dev:
       type: postgres
-      host: localhost
-      port: 5432
-      user: whoop
-      password: whoop_password
-      dbname: health_data
-  schema: public  # let models specify schemas (staging, marts); avoid concatenation like staging_marts
+      # Read from environment variables with safe defaults so Python, dbt, and Docker share one source of truth
+      host: "{{ env_var('DB_HOST', 'localhost') }}"
+      port: "{{ env_var('DB_PORT', '5432') | int }}"
+      user: "{{ env_var('DB_USER', 'whoop') }}"
+      password: "{{ env_var('DB_PASSWORD', 'whoop_password') }}"
+      dbname: "{{ env_var('DB_NAME', 'health_data') }}"
+      schema: "{{ env_var('DB_SCHEMA', 'public') }}"  # models may override schema via dbt_project.yml
       threads: 4
       connect_timeout: 10
       search_path: public

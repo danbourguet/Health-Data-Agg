@@ -57,3 +57,6 @@ target/
 dbt/target/
 logs/
 dbt_packages/
+dbt/profiles.yml
+dbt/.user.yml
+dbt/profiles.local.yml
