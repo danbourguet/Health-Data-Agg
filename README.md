@@ -1,8 +1,3 @@
-docker compose up -d
-dbt run
-dbt test
-dbt docs generate
-dbt docs serve
 # Health Data Aggregator
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
@@ -11,7 +6,7 @@ dbt docs serve
 ![Prefect](https://img.shields.io/badge/Prefect-2.x-1F62B2?logo=prefect)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
-Minimal personal health data stack (WHOOP + Quest labs) showcasing Python ingestion + dbt modeling + Prefect orchestration.
+Personal health data stack (WHOOP + Quest labs) showcasing Python ingestion + dbt modeling + Prefect orchestration.
 
 ---
 ## Architecture Diagram
@@ -39,13 +34,11 @@ flowchart LR
   DBT --> U
 ```
 
-Minimal personal health data stack (WHOOP + Quest PDF labs) showcasing Python ingestion + dbt modeling.
-
 ---
 ## 1. Quick Start (TL;DR)
 ```powershell
-git clone <this repo>
-cd health-data-whoop-agg
+git clone https://github.com/danbourguet/VitaWell
+cd VitaWell
 Copy-Item .env.example .env
 docker compose up -d   # start Postgres
 python -m venv .venv
@@ -105,6 +98,47 @@ python -m orchestration.flows run-full-refresh --quest-path path\to\labs
 ```
 
 ---
+## Prefect Orchestration (Optional)
+This repo includes Prefect 2.x flows to orchestrate end-to-end runs.
+
+Defined in `orchestration/flows.py`:
+- `full_refresh(quest_path: str | None)`
+  - bootstrap_db → whoop_ingest_all → quest_ingest_path → dbt_run → dbt_test
+- `daily_update(quest_path: str | None)`
+  - whoop_daily_refresh → quest_ingest_path → dbt_run → dbt_test
+
+Run flows locally (no server required):
+```powershell
+# Full refresh end-to-end
+python -m orchestration.flows run-full-refresh --quest-path path\to\labs
+
+# Daily incremental refresh (previous day for WHOOP + new Quest PDFs)
+python -m orchestration.flows run-daily-update --quest-path path\to\new_labs
+```
+
+Tips:
+- Activate your virtualenv so the `dbt` on PATH is the one in `.venv`.
+- Flows read settings from `.env` (WHOOP creds, DB connection); ensure it’s configured.
+- If your dbt profile is not at `%USERPROFILE%\\.dbt`, set `DBT_PROFILES_DIR` before running:
+  ```powershell
+  $env:DBT_PROFILES_DIR = "$(Get-Location)\\dbt"
+  ```
+
+Scheduling with Prefect (optional):
+```powershell
+# Start Prefect server locally (in another terminal)
+prefect server start
+
+# Build and apply a deployment for daily_update to run at 01:00 UTC daily
+prefect deployment build orchestration/flows.py:daily_update -n daily-update --cron "0 1 * * *" --apply
+
+# Start an agent to pick up scheduled runs
+prefect agent start -q default
+```
+
+---
+## 5. Project Structure (Essentials)
+---
 ## 5. Project Structure (Essentials)
 ```
 schema.sql                 # bootstrap DDL (raw + unified)
@@ -138,6 +172,16 @@ dbt docs serve
 - 401 WHOOP: delete `.token_store.json`, re-run auth.
 - Empty unified tables: ensure you ran ingest before `dbt run`.
 - Network/SSL errors: rerun; upserts are idempotent.
+
+---
+## Contributing & Git Hygiene
+- Commit: `dbt_project.yml`, models under `dbt/models/**/*` (.sql and .yml), and your macros under `dbt/macros/**/*`.
+- Do NOT commit: `target/`, `dbt/target/`, `logs/`, `dbt_internal_packages/`, `dbt_packages/`, virtualenvs, `.env`, token files. These are already listed in `.gitignore`.
+- Always run dbt from the project virtualenv to avoid alternate CLIs:
+  - PowerShell
+    - `\.venv\Scripts\Activate.ps1`
+    - `dbt debug && dbt run && dbt test`
+- Docs: `dbt docs generate` then `dbt docs serve` (served from `target/`; not committed).
 
 ---
 ## 8. Extending (Quick Notes)
