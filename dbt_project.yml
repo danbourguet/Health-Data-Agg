@@ -11,6 +11,6 @@ models:
       +schema: staging
       +materialized: view
     unified:
-      +schema: unified
+      +schema: marts
       +materialized: incremental
       +on_schema_change: append_new_columns

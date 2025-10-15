@@ -33,5 +33,5 @@ class WhoopAdapter(SourceAdapter):
         store_record(resource, record)
 
     def transform_and_load_unified(self, resource: str, record: dict) -> None:  # override
-        # Delegate to unified transform dispatcher
+        # Delegate to unified transform dispatcher (legacy path; dbt is primary and materializes into marts)
         transform_record(resource, record)

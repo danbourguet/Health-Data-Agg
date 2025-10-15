@@ -1,0 +1,16 @@
+health_data:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5432
+      user: whoop
+      password: whoop_password
+      dbname: health_data
+      schema: public
+      threads: 4
+      connect_timeout: 10
+      search_path: public
+      keepalives_idle: 0
+      retries: 1

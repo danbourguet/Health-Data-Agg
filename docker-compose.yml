@@ -6,15 +6,15 @@ services:
       # These map to the .env variables consumed by the app; defaults let compose up work instantly.
       POSTGRES_USER: ${DB_USER:-whoop}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-whoop_password}
-      POSTGRES_DB: ${DB_NAME:-whoop}
+      POSTGRES_DB: ${DB_NAME:-health_data}
     ports:
       - "5432:5432"
     volumes:
-      - whoop_pg_data:/var/lib/postgresql/data
+      - health_pg_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "${DB_USER:-whoop}"]
       interval: 10s
       timeout: 5s
       retries: 5
 volumes:
-  whoop_pg_data:
+  health_pg_data:

@@ -44,6 +44,7 @@ REDIRECT_URI = os.getenv('WHOOP_REDIRECT_URI', 'http://localhost:8765/callback')
 SCOPES = os.getenv('WHOOP_SCOPES', 'read:profile read:body_measurement read:cycles read:sleep read:recovery read:workout')
 PAGE_LIMIT = int(os.getenv('REQUEST_PAGE_LIMIT', '50'))
 TOKEN_STORE = Path('.token_store.json')
+from db import get_conn
 
 if not CLIENT_ID or not CLIENT_SECRET:
     logger.error('Missing WHOOP_CLIENT_ID or WHOOP_CLIENT_SECRET. Set them in .env or environment variables.')
@@ -54,6 +55,22 @@ class TokenManager:
         self.tokens = self._load_tokens()
 
     def _load_tokens(self):
+        # Prefer DB token storage
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute('SELECT access_token, refresh_token, scope, token_type, expires_at FROM meta.oauth_tokens ORDER BY created_at DESC LIMIT 1')
+                    row = cur.fetchone()
+                    if row:
+                        return {
+                            'access_token': row[0],
+                            'refresh_token': row[1],
+                            'scope': row[2],
+                            'token_type': row[3],
+                            'expires_at': row[4].isoformat() if hasattr(row[4], 'isoformat') else row[4],
+                        }
+        except Exception:
+            pass
         if TOKEN_STORE.exists():
             try:
                 return json.loads(TOKEN_STORE.read_text())
@@ -62,7 +79,17 @@ class TokenManager:
         return None
 
     def _save_tokens(self, data: dict):
-        TOKEN_STORE.write_text(json.dumps(data, indent=2))
+        # Save to DB and fall back to file
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'INSERT INTO meta.oauth_tokens (access_token, refresh_token, scope, token_type, expires_at) VALUES (%s,%s,%s,%s,%s)',
+                        (data.get('access_token'), data.get('refresh_token'), data.get('scope') or '', data.get('token_type') or 'bearer', data.get('expires_at'))
+                    )
+                conn.commit()
+        except Exception:
+            TOKEN_STORE.write_text(json.dumps(data, indent=2))
 
     def have_valid_access(self) -> bool:
         if not self.tokens:
@@ -325,7 +352,7 @@ def main(argv: List[str]):
     args = parse_args(argv)
     if args.auth_only:
         TOKEN_MANAGER.get_access_token()
-        print('Authentication complete. Tokens saved to .token_store.json')
+        print('Authentication complete. Token stored in Postgres (meta.oauth_tokens).')
         return
     # Always ensure schema exists before any truncate operations (user may have dropped tables)
     try:

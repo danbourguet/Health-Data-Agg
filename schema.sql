@@ -2,6 +2,7 @@
 CREATE SCHEMA IF NOT EXISTS meta;
 CREATE SCHEMA IF NOT EXISTS whoop_raw;
 CREATE SCHEMA IF NOT EXISTS unified;
+CREATE SCHEMA IF NOT EXISTS marts; -- dbt final models schema
 CREATE SCHEMA IF NOT EXISTS quest_raw;
 CREATE SCHEMA IF NOT EXISTS staging; -- used by dbt staging models
 
@@ -258,3 +259,16 @@ CREATE TABLE IF NOT EXISTS unified.lab_results (
 CREATE INDEX IF NOT EXISTS idx_lab_results_user_time ON unified.lab_results (internal_user_id, collected_at);
 CREATE INDEX IF NOT EXISTS idx_lab_results_code ON unified.lab_results (loinc_code);
 CREATE UNIQUE INDEX IF NOT EXISTS uix_lab_results_source ON unified.lab_results (source_system, raw_source_id);
+
+-- Quest raw PDFs storage (binary)
+CREATE TABLE IF NOT EXISTS quest_raw.lab_pdfs (
+    id BIGSERIAL PRIMARY KEY,
+    filename TEXT NOT NULL,
+    sha256 TEXT NOT NULL UNIQUE,
+    patient_id TEXT,
+    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    parsed_at TIMESTAMPTZ,
+    metadata JSONB,
+    pdf_data BYTEA NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_lab_pdfs_uploaded_at ON quest_raw.lab_pdfs (uploaded_at);

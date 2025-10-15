@@ -20,7 +20,7 @@ flowchart LR
   A2 --> R2[(quest_raw.*)]
   R1 --> S1[[staging WHOOP views]]
   R2 --> S2[[staging Quest views]]
-  S1 --> U[(unified tables)]
+  S1 --> U[(marts/unified tables)]
   S2 --> U
   U --> AN[Analytics / Docs]
   subgraph Orchestration
@@ -40,7 +40,7 @@ flowchart LR
 git clone https://github.com/danbourguet/VitaWell
 cd VitaWell
 Copy-Item .env.example .env
-docker compose up -d   # start Postgres
+docker compose up -d   # start Postgres (database: health_data)
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -58,15 +58,15 @@ dbt test
 ```
 
 
-Optional Quest labs ingestion (PDF only):
+Optional Quest labs ingestion (PDF only, stored as BYTEA then parsed):
 ```powershell
-python -m health_data.cli.main ingest-pdf --path path\to\labs --patient-id self
+python -m health_data.cli.main quest ingest --path path\to\labs --patient-id self
 ```
 
 ---
 ## 2. Concepts
 - Raw layer: `whoop_raw.*`, `quest_raw.*` store source payloads (idempotent upserts from API and PDF).
-- Modeling: dbt staging (`staging` schema) selects/renames; unified models (`unified` schema) produce analytics-friendly tables.
+- Modeling: dbt staging (`staging` schema) selects/renames; final analytics models (`marts` schema) produce analytics-friendly tables.
 - Orchestration: Prefect flow (optional) chains ingest + dbt (`python -m orchestration.flows run-full-refresh`).
 
 ---
@@ -89,7 +89,7 @@ dbt run --select unified_sleep_sessions unified_workouts unified_vitals
 
 Add new Quest PDFs then rebuild labs:
 ```powershell
-python -m health_data.cli.main ingest-pdf --path new_labs --patient-id self
+python -m health_data.cli.main quest ingest --path new_labs --patient-id self
 ```
 
 Full end-to-end via Prefect (optional):
@@ -148,8 +148,8 @@ health_data/               # Python package
   cli/main.py              # CLI entry
 dbt/
   dbt_project.yml          # dbt configuration
-  models/staging/          # staging views
-  models/unified/          # incremental unified models + tests yaml
+  models/staging/          # staging views (stg_*)
+  models/unified/          # incremental unified models + tests yaml (materialized into marts schema)
   macros/                  # reusable Jinja macros
 orchestration/flows.py     # Prefect flows (ingest + dbt)
 ```
@@ -169,7 +169,7 @@ dbt docs serve
 ---
 ## 7. Troubleshooting
 - Missing profiles.yml warning: copy `dbt/profiles.example.yml` to `%USERPROFILE%\.dbt\profiles.yml` or export `DBT_PROFILES_DIR`.
-- 401 WHOOP: delete `.token_store.json`, re-run auth.
+- 401 WHOOP: tokens are stored server-side in Postgres (meta.oauth_tokens). If needed, re-run `whoop auth` to refresh.
 - Empty unified tables: ensure you ran ingest before `dbt run`.
 - Network/SSL errors: rerun; upserts are idempotent.
 

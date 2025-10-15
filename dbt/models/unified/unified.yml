@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: unified_sleep_sessions
-    description: Unified sleep sessions derived from WHOOP staging data.
+    description: Unified sleep sessions derived from WHOOP staging data (materialized into marts schema).
     columns:
       - name: whoop_sleep_id
         data_tests: [not_null, unique]
@@ -11,7 +11,7 @@ models:
       - name: start_time
         data_tests: [not_null]
   - name: unified_workouts
-    description: Unified workouts derived from WHOOP staging data.
+    description: Unified workouts derived from WHOOP staging data (materialized into marts schema).
     columns:
       - name: whoop_workout_id
         data_tests: [not_null, unique]
@@ -20,7 +20,7 @@ models:
       - name: start_time
         data_tests: [not_null]
   - name: unified_vitals
-    description: Unified vitals (biometric measurements) derived from WHOOP recoveries.
+    description: Unified vitals (biometric measurements) derived from WHOOP recoveries (materialized into marts schema).
     columns:
       - name: vital_key
         data_tests: [not_null, unique]
@@ -29,7 +29,7 @@ models:
       - name: measure_time
         data_tests: [not_null]
   - name: unified_lab_results
-    description: Lab results consolidated from Quest observations (and future sources).
+    description: Lab results consolidated from Quest observations (and future sources) (materialized into marts schema).
     columns:
       - name: lab_result_key
         data_tests: [not_null, unique]

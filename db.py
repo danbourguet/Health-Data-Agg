@@ -2,6 +2,7 @@ import os
 import psycopg2
 from contextlib import contextmanager
 from psycopg2.extras import Json
+import hashlib
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -11,7 +12,7 @@ DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = int(os.getenv('DB_PORT', '5432'))
 DB_USER = os.getenv('DB_USER', 'whoop')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'whoop_password')
-DB_NAME = os.getenv('DB_NAME', 'whoop')
+DB_NAME = os.getenv('DB_NAME', 'health_data')
 
 DSN = f"host={DB_HOST} port={DB_PORT} dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD}"
 
@@ -266,4 +267,39 @@ def delete_activity_range(start_iso: str, end_iso: str):
             # order: recoveries depends on cycles (via cycle_id), so delete recoveries first
             for table, sql in [('whoop_raw.recoveries', queries['whoop_raw.recoveries']), ('whoop_raw.sleeps', queries['whoop_raw.sleeps']), ('whoop_raw.workouts', queries['whoop_raw.workouts']), ('whoop_raw.cycles', queries['whoop_raw.cycles'])]:
                 cur.execute(sql, (start_iso, end_iso))
+        conn.commit()
+
+# Quest PDF storage helpers
+
+def insert_quest_lab_pdf(file_path: str, patient_id: str | None = None, metadata: dict | None = None) -> str:
+    """Store a Quest lab PDF into quest_raw.lab_pdfs as BYTEA. Returns sha256 digest.
+
+    Deduplicates by sha256; if already present, does nothing and returns digest.
+    """
+    p = Path(file_path)
+    data = p.read_bytes()
+    sha = hashlib.sha256(data).hexdigest()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''INSERT INTO quest_raw.lab_pdfs (filename, sha256, patient_id, metadata, pdf_data)
+                   VALUES (%s,%s,%s,%s,%s)
+                   ON CONFLICT (sha256) DO NOTHING''',
+                (p.name, sha, patient_id, Json(metadata or {}), psycopg2.Binary(data))
+            )
+        conn.commit()
+    return sha
+
+def fetch_unparsed_lab_pdfs(limit: int = 50):
+    """Yield rows of unparsed PDFs (id, filename, patient_id, pdf_data)."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT id, filename, patient_id, pdf_data FROM quest_raw.lab_pdfs WHERE parsed_at IS NULL ORDER BY uploaded_at ASC LIMIT %s', (limit,))
+            for row in cur.fetchall():
+                yield {'id': row[0], 'filename': row[1], 'patient_id': row[2], 'pdf_data': row[3]}
+
+def mark_lab_pdf_parsed(pdf_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute('UPDATE quest_raw.lab_pdfs SET parsed_at = NOW() WHERE id = %s', (pdf_id,))
         conn.commit()

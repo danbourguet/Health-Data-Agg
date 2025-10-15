@@ -1,7 +1,13 @@
-"""Simple migration runner applying SQL files in order.
+"""Deprecated: migration runner.
 
-Usage: from cli, call run_migrations()
+This module is no longer used. Database structure is bootstrapped via schema.sql
+and data transformations are handled by dbt models.
+
+Importing this module will raise to prevent accidental usage.
 """
+raise RuntimeError(
+    "health_data.db.migration_runner is deprecated. Use schema.sql for bootstrap and dbt for modeling."
+)
 from __future__ import annotations
 import os
 from pathlib import Path
@@ -16,7 +22,7 @@ DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = int(os.getenv('DB_PORT', '5432'))
 DB_USER = os.getenv('DB_USER', 'whoop')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'whoop_password')
-DB_NAME = os.getenv('DB_NAME', 'whoop')
+DB_NAME = os.getenv('DB_NAME', 'health_data')
 DSN = f"host={DB_HOST} port={DB_PORT} dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD}"
 
 MIGRATIONS_DIR = Path(__file__).parent / 'migrations'
