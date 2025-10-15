@@ -28,6 +28,7 @@ from db import get_conn  # use DB persistence in meta.oauth_tokens
 class TokenManager:
     def __init__(self):
         self._lock = threading.Lock()
+        self._persisted = False  # True if tokens were loaded from DB or saved successfully
         self.tokens = self._load()
 
     def _load(self):
@@ -38,6 +39,7 @@ class TokenManager:
                     cur.execute('SELECT access_token, refresh_token, scope, token_type, expires_at FROM meta.oauth_tokens ORDER BY created_at DESC LIMIT 1')
                     row = cur.fetchone()
                     if row:
+                        self._persisted = True
                         return {
                             'access_token': row[0],
                             'refresh_token': row[1],
@@ -50,24 +52,61 @@ class TokenManager:
         # Fallback to local file
         if TOKEN_STORE.exists():
             try:
-                return json.loads(TOKEN_STORE.read_text())
+                tk = json.loads(TOKEN_STORE.read_text())
+                self._persisted = False
+                return tk
             except Exception:
                 return None
         return None
 
     def _save(self, data: dict):
-        # Save to DB
+        # Save to DB (normalize fields to match meta.oauth_tokens columns)
         try:
+            # Normalize/derive values
+            access_token = data.get('access_token')
+            # refresh_token may be omitted on some responses; persist previous one or empty string
+            refresh_token = data.get('refresh_token') or (self.tokens or {}).get('refresh_token') or ''
+            # WHOOP returns 'scope' as a space-delimited string; if missing, default to empty
+            scope_val = data.get('scope') or data.get('scopes') or ''
+            token_type = data.get('token_type') or 'bearer'
+            expires_at_val = data.get('expires_at')
+            if not expires_at_val:
+                # Derive from expires_in if available; default to 1 hour
+                exp_secs = data.get('expires_in', 3600)
+                expires_at_dt = datetime.now(timezone.utc) + timedelta(seconds=exp_secs)
+            else:
+                # Accept string or datetime; convert to datetime for psycopg2
+                if isinstance(expires_at_val, str):
+                    try:
+                        expires_at_dt = datetime.fromisoformat(expires_at_val)
+                    except Exception:
+                        # Fallback: treat as UTC naive or strip Z
+                        expires_at_dt = datetime.now(timezone.utc) + timedelta(seconds=int(data.get('expires_in', 3600)))
+                else:
+                    expires_at_dt = expires_at_val
+            if not access_token:
+                raise ValueError('Missing access_token in token payload')
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         'INSERT INTO meta.oauth_tokens (access_token, refresh_token, scope, token_type, expires_at) VALUES (%s,%s,%s,%s,%s)',
-                        (data.get('access_token'), data.get('refresh_token'), data.get('scope') or '', data.get('token_type') or 'bearer', data.get('expires_at'))
+                        (access_token, refresh_token, scope_val, token_type, expires_at_dt)
                     )
                 conn.commit()
-        except Exception:
+            self._persisted = True
+        except Exception as e:
+            logger.warning('Failed to persist WHOOP token to DB; falling back to local file: %s', e)
             # Fallback to local file if DB write fails
-            TOKEN_STORE.write_text(json.dumps(data, indent=2))
+            # Ensure local file has a consistent shape as well
+            file_data = {
+                'access_token': access_token or data.get('access_token'),
+                'refresh_token': refresh_token,
+                'scope': scope_val,
+                'token_type': token_type,
+                'expires_at': (expires_at_dt.isoformat() if 'expires_at_dt' in locals() else data.get('expires_at'))
+                               or (datetime.now(timezone.utc) + timedelta(seconds=int(data.get('expires_in', 3600)))).isoformat(),
+            }
+            TOKEN_STORE.write_text(json.dumps(file_data, indent=2))
 
     def _valid(self) -> bool:
         if not self.tokens:
@@ -81,6 +120,9 @@ class TokenManager:
     def get_access_token(self) -> str:
         with self._lock:
             if self._valid():
+                # If tokens were loaded from file and not yet persisted, write them to DB now
+                if not self._persisted:
+                    self._save(self.tokens)
                 return self.tokens['access_token']
             if self.tokens and self.tokens.get('refresh_token'):
                 self.refresh()
@@ -137,7 +179,15 @@ class TokenManager:
         }
         resp = requests.post(TOKEN_URL, data=data, timeout=30); resp.raise_for_status()
         tk = resp.json(); exp = tk.get('expires_in', 3600)
+        # Normalize token fields
         tk['expires_at'] = (datetime.now(timezone.utc) + timedelta(seconds=exp)).isoformat()
+        tk['token_type'] = tk.get('token_type') or 'bearer'
+        tk['scope'] = tk.get('scope') or tk.get('scopes') or ''
+        # refresh_token should be present for auth_code grant, but guard anyway
+        if not tk.get('refresh_token') and self.tokens:
+            rt = (self.tokens or {}).get('refresh_token')
+            if rt:
+                tk['refresh_token'] = rt
         self.tokens = tk; self._save(tk)
         logger.info('WHOOP token stored.')
 
@@ -155,7 +205,10 @@ class TokenManager:
             logger.warning('Refresh failed; starting auth flow')
             self.authorize_flow(); return
         tk = resp.json(); exp = tk.get('expires_in', 3600)
+        # Normalize token fields
         tk['expires_at'] = (datetime.now(timezone.utc) + timedelta(seconds=exp)).isoformat()
+        tk['token_type'] = tk.get('token_type') or 'bearer'
+        tk['scope'] = tk.get('scope') or tk.get('scopes') or ''
         tk.setdefault('refresh_token', self.tokens.get('refresh_token'))
         self.tokens = tk; self._save(tk)
         logger.info('WHOOP token refreshed.')
