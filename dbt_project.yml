@@ -2,7 +2,7 @@ name: health_data
 version: 1.0.0
 config-version: 2
 profile: health_data
-model-paths: ["models"]
+model-paths: ["dbt/models"]
 
 models:
   health_data:

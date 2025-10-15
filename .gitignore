@@ -23,6 +23,7 @@ Desktop.ini
 # Environment and dependency files
 .env*
 venv/
+.venv/
 ENV/
 
 # Docker
@@ -42,7 +43,6 @@ docker-compose.override.yml
 *.ps1~
 
 # Ignore database dumps
-*.sql
 *.dump
  
 # Token store
@@ -50,3 +50,10 @@ docker-compose.override.yml
 
 # Quest reports
 *.pdf
+dbt_internal_packages/
+
+# dbt build artifacts
+target/
+dbt/target/
+logs/
+dbt_packages/

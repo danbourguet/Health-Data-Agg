@@ -5,35 +5,35 @@ models:
     description: Unified sleep sessions derived from WHOOP staging data.
     columns:
       - name: whoop_sleep_id
-        tests: [not_null, unique]
+        data_tests: [not_null, unique]
       - name: user_id
-        tests: [not_null]
+        data_tests: [not_null]
       - name: start_time
-        tests: [not_null]
+        data_tests: [not_null]
   - name: unified_workouts
     description: Unified workouts derived from WHOOP staging data.
     columns:
       - name: whoop_workout_id
-        tests: [not_null, unique]
+        data_tests: [not_null, unique]
       - name: user_id
-        tests: [not_null]
+        data_tests: [not_null]
       - name: start_time
-        tests: [not_null]
+        data_tests: [not_null]
   - name: unified_vitals
     description: Unified vitals (biometric measurements) derived from WHOOP recoveries.
     columns:
       - name: vital_key
-        tests: [not_null, unique]
+        data_tests: [not_null, unique]
       - name: metric
-        tests: [not_null]
+        data_tests: [not_null]
       - name: measure_time
-        tests: [not_null]
+        data_tests: [not_null]
   - name: unified_lab_results
     description: Lab results consolidated from Quest observations (and future sources).
     columns:
       - name: lab_result_key
-        tests: [not_null, unique]
+        data_tests: [not_null, unique]
       - name: user_id
-        tests: [not_null]
+        data_tests: [not_null]
       - name: collected_at
-        tests: [not_null]
+        data_tests: [not_null]
