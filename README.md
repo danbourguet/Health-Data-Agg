@@ -37,8 +37,6 @@ flowchart LR
 ---
 ## 1. Quick Start (TL;DR)
 ```powershell
-git clone https://github.com/danbourguet/VitaWell
-cd VitaWell
 Copy-Item .env.example .env
 docker compose up -d   # start Postgres (database: health_data)
 python -m venv .venv
@@ -136,8 +134,6 @@ prefect deployment build orchestration/flows.py:daily_update -n daily-update --c
 prefect agent start -q default
 ```
 
----
-## 5. Project Structure (Essentials)
 ---
 ## 5. Project Structure (Essentials)
 ```

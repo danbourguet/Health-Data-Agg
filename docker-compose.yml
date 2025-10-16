@@ -3,16 +3,15 @@ services:
     image: postgres:16-alpine
     container_name: health-data-db
     environment:
-      # These map to the .env variables consumed by the app; defaults let compose up work instantly.
-      POSTGRES_USER: ${DB_USER:-whoop}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-whoop_password}
-      POSTGRES_DB: ${DB_NAME:-health_data}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
       - "5432:5432"
     volumes:
       - health_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${DB_USER:-whoop}"]
+      test: ["CMD", "pg_isready", "-U", "${DB_USER}", "-d", "${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
