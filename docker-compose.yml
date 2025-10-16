@@ -3,7 +3,6 @@ services:
     image: postgres:16-alpine
     container_name: health-data-db
     environment:
-      # These map to the .env variables consumed by the app; defaults let compose up work instantly.
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
